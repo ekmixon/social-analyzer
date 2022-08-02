@@ -100,7 +100,7 @@ class SocialAnalyzer():
         with suppress(Exception):
             lang = detect(text)
             if lang and lang != "":
-                return self.languages_json[lang] + " (Maybe)"
+                return f"{self.languages_json[lang]} (Maybe)"
         return "unavailable"
 
     def get_language_by_parsing(self, source):
@@ -123,20 +123,21 @@ class SocialAnalyzer():
             @wraps(func)
             def wrapper(*args, **kwargs):
                 if on_off:
-                    try:
+                    with suppress(Exception):
                         return func(*args, **kwargs)
-                    except Exception as err:
-                        pass
-                        # self.print_wrapper(e)
                 else:
                     return func(*args, **kwargs)
+
             return wrapper
+
         return decorator
 
     def setup_logger(self, uuid=None, file=False, argv=None):
         '''
         setup a logger for logs in the temp folder
         '''
+
+
 
         class CustomHandler(Handler):
             '''
@@ -157,37 +158,43 @@ class SocialAnalyzer():
                 emit, based on user choices
                 '''
 
-                if self.argv.output != "json" and self.sa_object.silent == False:
-                    if record.levelname == "CUSTOM":
-                        for item in record.msg:
-                            with suppress(Exception):
-                                if item == record.msg[0]:
-                                    print("-----------------------")
-                                for key, value in item.items():
-                                    if key == "metadata" or key == "extracted":
-                                        if (self.argv.metadata and key == "metadata") or (self.argv.extract and key == "extracted"):
-                                            with suppress(Exception):
-                                                for idx, _item in enumerate(value):
-                                                    empty_string = key + " " + str(idx)
-                                                    empty_string = colored(empty_string.ljust(13, ' '), 'blue') + ": "
-                                                    for _item_key, _item_value in _item.items():
-                                                        if self.argv.trim and _item_key == "content" and len(_item_value) > 50:
-                                                            empty_string += "{} : {} ".format(colored(_item_key, 'blue'), colored(_item_value[:50] + "..", 'yellow'))
-                                                        else:
-                                                            empty_string += "{} : {} ".format(colored(_item_key, 'blue'), colored(_item_value, 'yellow'))
-                                                    print("{}".format(empty_string))
-                                    else:
-                                        print(colored(key.ljust(13, ' '), 'blue'), colored(value, 'yellow'), sep=": ")
+                if self.argv.output == "json" or self.sa_object.silent != False:
+                    return
+                if record.levelname == "CUSTOM":
+                    for item in record.msg:
+                        with suppress(Exception):
+                            if item == record.msg[0]:
                                 print("-----------------------")
-                    else:
-                        print(record.msg)
+                            for key, value in item.items():
+                                if (
+                                    key == "metadata"
+                                    and self.argv.metadata
+                                    or key != "metadata"
+                                    and key == "extracted"
+                                    and self.argv.extract
+                                ):
+                                    with suppress(Exception):
+                                        for idx, _item in enumerate(value):
+                                            empty_string = f"{key} {str(idx)}"
+                                            empty_string = colored(empty_string.ljust(13, ' '), 'blue') + ": "
+                                            for _item_key, _item_value in _item.items():
+                                                if self.argv.trim and _item_key == "content" and len(_item_value) > 50:
+                                                    empty_string += f"""{colored(_item_key, 'blue')} : {colored(f"{_item_value[:50]}..", 'yellow')} """
 
-        if self.logs_dir != '':
-            temp_folder = self.logs_dir
-        else:
-            temp_folder = mkdtemp()
+                                                else:
+                                                    empty_string += f"{colored(_item_key, 'blue')} : {colored(_item_value, 'yellow')} "
+
+                                            print(f"{empty_string}")
+                                elif key not in ["metadata", "extracted"]:
+                                    print(colored(key.ljust(13, ' '), 'blue'), colored(value, 'yellow'), sep=": ")
+                            print("-----------------------")
+                else:
+                    print(record.msg)
+
+
+        temp_folder = self.logs_dir if self.logs_dir != '' else mkdtemp()
         if argv.output != "json":
-            self.print_wrapper('[init] Temporary Logs Directory {}'.format(temp_folder))
+            self.print_wrapper(f'[init] Temporary Logs Directory {temp_folder}')
         self.log.setLevel(DEBUG)
         self.log.addHandler(CustomHandler(argv, sa_object=self))
         addLevelName(self.custom_message, "CUSTOM")
